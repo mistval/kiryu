@@ -36,7 +36,7 @@ async function tryAddReaction(msg, reaction) {
 
 async function tryRemoveReaction(msg, reaction) {
   try {
-    await msg.removeReaction(reaction);
+    await msg.removeReactionEmoji(reaction);
   } catch (err) {
     return logError(`Failed to remove reaction ${reaction} from ${msg.id}`, err);
   }
@@ -134,6 +134,7 @@ bot.on('ready', async () => {
       process.exit(1);
     }
 
+    codeMessages.splice(0, codeMessages.length);
     codeMessages.push(
       ...codeChannelMessages.filter(m => allowedProgrammers.includes(m.author.id)),
     );
