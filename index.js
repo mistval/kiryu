@@ -14,6 +14,7 @@ const bot = new Eris(BOT_TOKEN);
 const allowedProgrammers = PROGRAMMER_IDS.split(',');
 const messageHandlers = [];
 const codeMessages = [];
+const shared = {};
 
 async function logError(description, err) {
   console.warn(err);
