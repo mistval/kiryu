@@ -1,6 +1,14 @@
 import 'dotenv/config';
+import util from 'util';
+import { exec as execSync } from 'child_process';
 import assert from 'assert';
 import Eris from 'eris';
+import { dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+const exec = util.promisify(execSync);
 
 const MAX_CODE_MESSAGES = 100;
 const { BOT_TOKEN, CODE_CHANNEL_ID, LOG_CHANNEL_ID, PROGRAMMER_IDS } = process.env;
@@ -14,7 +22,30 @@ const bot = new Eris(BOT_TOKEN);
 const allowedProgrammers = PROGRAMMER_IDS.split(',');
 const messageHandlers = [];
 const codeMessages = [];
+const moduleLoaderPromises = {};
 const shared = {};
+
+function getModule(name, installSource) {
+  if (moduleLoaderPromises[name]) {
+    return moduleLoaderPromises[name];
+  }
+
+  moduleLoaderPromises[name] = (async() => {
+    try {
+      return await import(name);
+    } catch (err) {
+      if (err.code !== 'ERR_MODULE_NOT_FOUND') {
+        throw err;
+      }
+    }
+
+    await exec(`npm install ${installSource ?? name}`, { cwd: __dirname });
+    console.log('Exiting due to new package installation. Restart me.');
+    process.exit(0);
+  })();
+
+  return moduleLoaderPromises[name];
+}
 
 async function logError(description, err) {
   console.warn(err);
@@ -43,7 +74,7 @@ async function tryRemoveReaction(msg, reaction) {
   }
 }
 
-function refreshCode() {
+async function refreshCode() {
   messageHandlers.splice(0, messageHandlers.length);
 
   for (const codeChannelMessage of codeMessages) {
@@ -52,7 +83,7 @@ function refreshCode() {
     try {
       const jsCodeMatch = codeChannelMessage.content.match(/```js(.*?)```/s);
       if (jsCodeMatch) {
-        eval(jsCodeMatch[1]);
+        await eval(jsCodeMatch[1]);
         tryAddReaction(codeChannelMessage, '✅');
         tryRemoveReaction(codeChannelMessage, '❌');
       }
@@ -140,7 +171,7 @@ bot.on('ready', async () => {
       ...codeChannelMessages.filter(m => allowedProgrammers.includes(m.author.id)),
     );
 
-    refreshCode();
+    await refreshCode();
   } catch (err) {
     console.warn('Error loading code');
     console.warn(err);
