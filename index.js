@@ -152,5 +152,6 @@ bot.on('ready', async () => {
 
 bot.connect().catch(err => {
   console.warn('Error connecting to Discord');
+  console.warn(err);
   process.exit(1);
 });
