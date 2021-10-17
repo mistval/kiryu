@@ -81,12 +81,13 @@ async function refreshCode() {
     assert(allowedProgrammers.includes(codeChannelMessage.author.id));
 
     try {
-      const jsCodeMatch = codeChannelMessage.content.match(/```js(.*?)```/s);
-      if (jsCodeMatch) {
+      const jsCodeMatches = [...codeChannelMessage.content.matchAll(/```js(.*?)```/gs)];
+      for (const jsCodeMatch of jsCodeMatches) {
         await eval(jsCodeMatch[1]);
-        tryAddReaction(codeChannelMessage, '✅');
-        tryRemoveReaction(codeChannelMessage, '❌');
       }
+
+      tryAddReaction(codeChannelMessage, '✅');
+      tryRemoveReaction(codeChannelMessage, '❌');
     } catch (err) {
       tryRemoveReaction(codeChannelMessage, '✅');
       tryAddReaction(codeChannelMessage, '❌');
