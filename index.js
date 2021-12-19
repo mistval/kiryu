@@ -2,7 +2,7 @@ import 'dotenv/config';
 import util from 'util';
 import { exec as execSync } from 'child_process';
 import assert from 'assert';
-import Eris from 'eris';
+import Eris, { Constants as ErisConstants } from 'eris';
 import { dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -17,7 +17,7 @@ if (!BOT_TOKEN || !CODE_CHANNEL_ID || !PROGRAMMER_IDS || !LOG_CHANNEL_ID) {
   throw new Error('Expected BOT_TOKEN, CODE_CHANNEL_ID, PROGRAMMER_IDS, and LOG_CHANNEL_ID environment variables.');
 }
 
-const bot = new Eris(BOT_TOKEN);
+const bot = new Eris(BOT_TOKEN, { intents: ErisConstants.Intents.all });
 
 const allowedProgrammers = PROGRAMMER_IDS.split(',');
 const messageHandlers = [];
