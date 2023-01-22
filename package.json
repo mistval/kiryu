@@ -14,7 +14,7 @@
   "author": "mistval",
   "license": "MIT",
   "dependencies": {
-    "better-sqlite3": "^7.4.5",
+    "better-sqlite3": "^8.0.1",
     "dotenv": "^10.0.0",
     "eris": "^0.16.1"
   }
