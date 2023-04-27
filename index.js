@@ -1,6 +1,5 @@
 import 'dotenv/config';
-import util from 'util';
-import { exec as execSync } from 'child_process';
+import { execSync } from 'child_process';
 import assert from 'assert';
 import Eris, { Constants as ErisConstants } from 'eris';
 import { dirname } from 'path';
@@ -8,20 +7,19 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const exec = util.promisify(execSync);
+const MAX_CODE_MESSAGES = 99;
+const { BOT_TOKEN, CODE_CHANNEL_IDS, LOG_CHANNEL_ID, PROGRAMMER_IDS } = process.env;
 
-const MAX_CODE_MESSAGES = 100;
-const { BOT_TOKEN, CODE_CHANNEL_ID, LOG_CHANNEL_ID, PROGRAMMER_IDS } = process.env;
-
-if (!BOT_TOKEN || !CODE_CHANNEL_ID || !PROGRAMMER_IDS || !LOG_CHANNEL_ID) {
-  throw new Error('Expected BOT_TOKEN, CODE_CHANNEL_ID, PROGRAMMER_IDS, and LOG_CHANNEL_ID environment variables.');
+if (!BOT_TOKEN || !CODE_CHANNEL_IDS || !PROGRAMMER_IDS || !LOG_CHANNEL_ID) {
+  throw new Error('Expected BOT_TOKEN, CODE_CHANNEL_IDS, PROGRAMMER_IDS, and LOG_CHANNEL_ID environment variables.');
 }
 
 const bot = new Eris(BOT_TOKEN, { intents: ErisConstants.Intents.all });
 
 const allowedProgrammers = PROGRAMMER_IDS.split(',');
+const codeChannels = CODE_CHANNEL_IDS.split(',');
 const messageHandlers = [];
-const codeMessages = [];
+const codeMessages = new Map();
 const moduleLoaderPromises = {};
 const shared = {};
 
@@ -39,7 +37,7 @@ function getModule(name, installSource) {
       }
     }
 
-    await exec(`npm install ${installSource ?? name}`, { cwd: __dirname });
+    execSync(`npm install ${installSource ?? name}`, { cwd: __dirname });
     console.log('Exiting due to new package installation. Restart me.');
     process.exit(0);
   })();
@@ -53,8 +51,7 @@ async function logError(description, err) {
   try {
     await bot.createMessage(LOG_CHANNEL_ID, `${description}: ${err.message}`);
   } catch (err) {
-    console.warn('Failed to log error');
-    console.warn(err);
+    console.warn('Failed to log error', err);
   }
 }
 
@@ -77,7 +74,7 @@ async function tryRemoveReaction(msg, reaction) {
 async function refreshCode() {
   messageHandlers.splice(0, messageHandlers.length);
 
-  for (const codeChannelMessage of codeMessages) {
+  for (const codeChannelMessage of codeMessages.values()) {
     assert(allowedProgrammers.includes(codeChannelMessage.author.id));
 
     try {
@@ -97,6 +94,10 @@ async function refreshCode() {
 }
 
 async function handleMessage(msg) {
+  if (msg.author.bot) {
+    return;
+  }
+
   for (const messageHandler of messageHandlers) {
     try {
       await messageHandler(msg);
@@ -107,12 +108,8 @@ async function handleMessage(msg) {
 }
 
 bot.on('messageCreate', async (msg) => {
-  if (msg.author.bot) {
-    return;
-  }
-
-  if (msg.channel.id === CODE_CHANNEL_ID && allowedProgrammers.includes(msg.author.id)) {
-    codeMessages.push(msg);
+  if (codeChannels.includes(msg.channel.id) && allowedProgrammers.includes(msg.author.id)) {
+    codeMessages.set(msg.id, msg);
     return refreshCode();
   }
 
@@ -120,25 +117,16 @@ bot.on('messageCreate', async (msg) => {
 });
 
 bot.on('messageUpdate', (msg) => {
-  if (msg.author.bot) {
-    return;
-  }
-
-  if (msg.channel.id === CODE_CHANNEL_ID) {
-    const codeMessageIndex = codeMessages.findIndex(m => m.id === msg.id);
-    if (codeMessageIndex !== -1) {
-      codeMessages[codeMessageIndex] = msg;
-      return refreshCode();
-    }
+  if (codeMessages.has(msg.id)) {
+    codeMessages.set(msg.id, msg);
+    return refreshCode();
   }
 
   return handleMessage(msg);
 });
 
 bot.on('messageDelete', (msg) => {
-  const codeMessageIndex = codeMessages.findIndex(m => m.id === msg.id);
-  if (codeMessageIndex !== -1) {
-    codeMessages.splice(codeMessageIndex, 1);
+  if (codeMessages.delete(msg.id)) {
     refreshCode();
   }
 });
@@ -148,42 +136,37 @@ bot.on('error', (err) => {
 });
 
 bot.on('ready', async () => {
-  const guildId = bot.channelGuildMap[CODE_CHANNEL_ID];
-  if (!guildId) {
-    console.warn('Cannot find the guild I am supposed to be in.');
-    process.exit(1);
-  }
-
-  const codeChannel = bot.guilds.get(guildId).channels.get(CODE_CHANNEL_ID);
-  if (!codeChannel) {
-    console.warn('Cannot find the code channel');
-    process.exit(1);
-  }
-
-  try {
-    const codeChannelMessages = await codeChannel.getMessages({ limit: MAX_CODE_MESSAGES });
-    if (codeChannelMessages.length >= MAX_CODE_MESSAGES) {
-      console.warn(`There are too many messages in the code channel.`);
+  for (const codeChannelId of codeChannels) {
+    const guildId = bot.channelGuildMap[codeChannelId];
+    if (!guildId) {
+      console.warn(`Cannot find guild for code channel ${codeChannelId}`);
       process.exit(1);
     }
 
-    codeMessages.splice(0, codeMessages.length);
-    codeMessages.push(
-      ...codeChannelMessages.filter(m => allowedProgrammers.includes(m.author.id)),
-    );
+    const codeChannel = bot.guilds.get(guildId).channels.get(codeChannelId);
 
-    await refreshCode();
-  } catch (err) {
-    console.warn('Error loading code');
-    console.warn(err);
-    process.exit(1);
+    try {
+      const codeChannelMessages = await codeChannel.getMessages({ limit: MAX_CODE_MESSAGES + 1 });
+      if (codeChannelMessages.length > MAX_CODE_MESSAGES) {
+        console.warn(`There are too many messages in the code channel.`);
+        process.exit(1);
+      }
+
+      codeChannelMessages
+        .filter(m => allowedProgrammers.includes(m.author.id))
+        .forEach(m => codeMessages.set(m.id, m));
+    } catch (err) {
+      console.warn('Error loading code', err);
+      process.exit(1);
+    }
   }
+
+  await refreshCode();
 
   console.log('Started successfully.');
 });
 
 bot.connect().catch(err => {
-  console.warn('Error connecting to Discord');
-  console.warn(err);
+  console.warn('Error connecting to Discord', err);
   process.exit(1);
 });
