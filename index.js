@@ -83,8 +83,10 @@ async function refreshCode() {
         await eval(jsCodeMatch[1]);
       }
 
-      tryAddReaction(codeChannelMessage, '✅');
-      tryRemoveReaction(codeChannelMessage, '❌');
+      if (jsCodeMatches.length > 0) {
+        tryAddReaction(codeChannelMessage, '✅');
+        tryRemoveReaction(codeChannelMessage, '❌');
+      }
     } catch (err) {
       tryRemoveReaction(codeChannelMessage, '✅');
       tryAddReaction(codeChannelMessage, '❌');
