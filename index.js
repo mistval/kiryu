@@ -16,8 +16,8 @@ if (!BOT_TOKEN || !CODE_CHANNEL_IDS || !PROGRAMMER_IDS || !LOG_CHANNEL_ID) {
 
 const bot = new Eris(BOT_TOKEN, { intents: ErisConstants.Intents.all });
 
-const allowedProgrammers = PROGRAMMER_IDS.split(',');
-const codeChannels = CODE_CHANNEL_IDS.split(',');
+const allowedProgrammers = PROGRAMMER_IDS.split(',').map(s => s.trim());
+const codeChannels = CODE_CHANNEL_IDS.split(',').map(s => s.trim());
 const messageHandlers = [];
 const codeMessages = new Map();
 const moduleLoaderPromises = {};
