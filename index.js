@@ -137,7 +137,7 @@ bot.on('error', (err) => {
   console.warn(err);
 });
 
-bot.on('ready', async () => {
+const readyHandler = async () => {
   for (const codeChannelId of codeChannels) {
     const guildId = bot.channelGuildMap[codeChannelId];
     if (!guildId) {
@@ -166,7 +166,11 @@ bot.on('ready', async () => {
   await refreshCode();
 
   console.log('Started successfully.');
-});
+
+  bot.off('ready', readyHandler);
+};
+
+bot.on('ready', readyHandler);
 
 bot.connect().catch(err => {
   console.warn('Error connecting to Discord', err);
